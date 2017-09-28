@@ -21,12 +21,17 @@ namespace KodKodSample
                 return NotFound();
             }
 
-            return Ok();
+            return Ok(new Pet());
         }
 
         [HttpGet("findByStatus")]
         public ActionResult<Pet> FindByStatus([FromQuery] Status status)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest();
+            }
+
             return Ok();
         }
 
