@@ -59,3 +59,7 @@ Getting to ApiDescription requires running the user's application.
 MSBuild tasks that allow build time generation of swagger documents. Could also be used to do client generation based on some property \ switch.
 
 Could ship the same bootstrappers that ship in the CLI and launch those directly. Alternatively, execs `nswag aspnetcore2swagger` using variables that NSwag.MSBuild sets up.
+
+
+## Client - Swagger in - Generated code out
+TODO
