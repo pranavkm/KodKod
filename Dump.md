@@ -27,38 +27,36 @@ Tools to produce swagger document (json). Invokes NSwag.SwaggerGeneration.WebApi
 
 1. Something equivalent to this - https://github.com/domaindrivendev/Swashbuckle.AspNetCore/blob/master/src/Swashbuckle.AspNetCore.SwaggerGen/Generator/SwaggerGenerator.cs
 2. Prototype code - https://github.com/pranavkm/KodKod/blob/617d99f49ffc66f02adb6247f9042118a9134fa3/tools/KodKod.Tool/NSwaggerizer.cs
-3. This will need to reference 2.1.0 builds of Mvc to pick up desirable features we're adding to ApiDescription (https://github.com/aspnet/Mvc/pull/6911)
+3. We'll reference Microsoft.AspNetCore.Mvc 1.0.3 (the version NSwag.AspNetCore references) and use reflection to look up any new properties to ApiDescription that were introduced in later versions of Mvc.
 
 #### NSwag.AspNetCore
 
-1. If we're allowed to directly reference NSwag.SwaggerGeneration.AspNetCoreMvc from the middleware, we could pivot on a switch in `NSwag.AspNetCore.SwaggerSettings` to determine 
-what source (WebApiToSwaggerGenerator \ AspNetCoreToSwaggerGenerator) to use. Direct referencing is problematic because it will cause TFM \ package reference changes (it currently reference Microsoft.AspNetCore.Mvc 1.0.3). 
-Also requires building NSwag.SwaggerGeneration.AspNetCoreMvc with the other packages in this repo which will have a pre-release dependency until we ship 2.1.0.
-
-2. We could pivot on an adapter referencing an interface to determine the source of truth. e.g. 
-    1) Introduce `NSwag.SwaggerGeneraion.ISwaggerDocumentGenerator.Generate(SwaggerGenerationContext)` that's implemented by AspNetCoreToSwaggerGenerator.
-    2) NSwag.SwaggerGeneration.AspNetCore would have an extension to register the service. The middleware would use the service if available or fallback to WebApiToSwaggerGenerator.
-    2) Use registered value if available in DI. Code would look like:
-    ```C#
-        app.AddNSwagAspNetCoreAdapter(); // services.AddSingleton<ISwaggerDocumentGenerator, AspNetCoreToSwaggerGenerator>();
-        ...
-        app.UseSwaggerUI();
-    ```
+1. NSwag.AspNetCore will have a project dependency on NSwag.SwaggerGeneration.AspNetCoreMvc. We'll use a switch on `NSwag.AspNetCore.SwaggerSettings` to determine what source (WebApiToSwaggerGenerator \ AspNetCoreToSwaggerGenerator) to use:
+Example:
+```C#
+app.UseSwaggerUI(new SwaggerUISettings { UseApiExplorerForSwaggerGeneration = true });
+```
     
 #### Tools
 Getting to ApiDescription requires running the user's application. 
 `nswag aspnetcore2swagger /assembly:{assembly.dll} /output:{output.json} [/depsFile:{assembly.deps.json}] /tfm:[desktop|coreclr] [/bitness:[32|64]] `
 
-* nswag will run a bootstrapper in the context of the user'code. Essentially this - https://github.com/aspnet/MvcPrecompilation/blob/dev/src/Microsoft.AspNetCore.Mvc.Razor.ViewCompilation/build/netstandard2.0/Microsoft.AspNetCore.Mvc.Razor.ViewCompilation.targets#L52-L59
-* Bootstrapper discovers and executes a contract type in NSwag.SwaggerGeneration.AspNetCore (maybe re-use ISwaggerDocumentGenerator)
+We'll follow a similar pattern to what we do in MvcPrecompilation. `aspnetcore2swagger` would launch a process in the user's context. 
+* For dotnet core, this  means `dotnet exec ExecBinary --depsfile &quot;$(assembly.deps.json)&quot; /output:{output.json} /input:{assembly.dll}`. 
+* For desktop, this would involve copying ExecBinary.{bitness}.exe to the bin directory and running it.
+
+ExecBinary will 
+1. run some portion of the startup code (https://github.com/aspnet/Mvc/blob/dev/src/Microsoft.AspNetCore.Mvc.Core/IDesignTimeMvcBuilderConfiguration.cs), 
+2. use the `IApiDescriptionGroupCollectionProvider` from DI to run NSWag.SwaggerGeneration.AspNetCore. 
+3. Write the generated output to {output.json}
+
 * NPM module essentially launches the CLI tools, so we get this for free.
 * Need to determine if this is feasible from NSwagStudio.
 
 
 #### NSwag.MSBuild.AspNetCore
 MSBuild tasks that allow build time generation of swagger documents. Could also be used to do client generation based on some property \ switch.
-
-Could ship the same bootstrappers that ship in the CLI and launch those directly. Alternatively, execs `nswag aspnetcore2swagger` using variables that NSwag.MSBuild sets up.
+The package will add a target to the project that gathers project metadata (bitness, output path, deps file location, tfm etc) and launch `nswag aspnetcore2swagger` \ `dotnet exec ExecBinary ..`
 
 
 ## Client - Swagger in - Generated code out
